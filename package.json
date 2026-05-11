@@ -2,9 +2,9 @@
   "name": "stradebot",
   "version": "1.0.0",
   "description": "STradeBot — 30-layer quantitative day trading agent",
-  "main": "warren-server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node warren-server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "telegraf": "^4.16.3",
