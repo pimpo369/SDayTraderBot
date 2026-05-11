@@ -846,61 +846,49 @@ bot.help(ctx=>ctx.replyWithHTML(`/portfolio /scan /research /positions /history 
  
 // /movers — top gaining stocks right now
 bot.command("movers", async ctx => {
-  ctx.replyWithHTML("📈 <i>Fetching top movers...</i>");
+  ctx.replyWithHTML("<i>Fetching top movers...</i>");
   try {
     const data = await safeFetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers?apiKey=${cfg.polygon}`);
     if (!data?.tickers?.length) { ctx.reply("No data available."); return; }
-    let msg = "📈 <b>Top Movers Right Now</b>
- 
-";
+    let msg = "<b>Top Movers Right Now</b>\n\n";
     data.tickers.slice(0,10).forEach((t,i) => {
-      const chg = t.todaysChangePerc?.toFixed(2) || "?";
-      const price = t.day?.c?.toFixed(2) || "?";
+      const chg = (t.todaysChangePerc||0).toFixed(2);
+      const price = (t.day?.c||0).toFixed(2);
       const vol = t.day?.v ? (t.day.v/1000).toFixed(0)+"K" : "?";
-      msg += `${i+1}. <b>${t.ticker}</b> $${price} (+${chg}%) Vol:${vol}
-`;
+      msg += `${i+1}. <b>${t.ticker}</b> $${price} (+${chg}%) Vol:${vol}\n`;
     });
     ctx.replyWithHTML(msg);
   } catch(e) { ctx.reply(`Error: ${e.message}`); }
 });
  
-// /best — run quick research on top 5 discovered tickers and show scores
 bot.command("best", async ctx => {
   if (isRateLimited(ctx.from?.id)) { ctx.reply("Wait 20 seconds."); return; }
-  ctx.replyWithHTML("🔬 <i>Finding best trade right now — scanning top candidates...</i>");
+  ctx.replyWithHTML("<i>Finding best trade right now...</i>");
   try {
     const candidates = await discoverCandidates(getSession());
-    const top5 = candidates.slice(0, 5);
+    const top5 = candidates.slice(0,5);
     const results = [];
     for (const c of top5) {
       const {score, price} = await runAllLayers(c.ticker, c.isCrypto);
-      results.push({ticker: c.ticker, score, price, via: c.discoveredVia});
+      results.push({ticker:c.ticker, score, price, via:c.discoveredVia});
       await delay(300);
     }
     results.sort((a,b) => b.score - a.score);
     const minV = getMinVotes(getSession());
-    let msg = `🏆 <b>Best Trade Right Now</b>
-Session: ${getSession().toUpperCase()} | Need ${minV}/30
- 
-`;
-    results.forEach((r,i) => {
-      const signal = r.score >= minV ? "BUY" : r.score >= minV-3 ? "CLOSE" : "SKIP";
-      const emoji = signal==="BUY" ? "🟢" : signal==="CLOSE" ? "🟡" : "🔴";
-      msg += `${emoji} <b>${r.ticker}</b> — ${r.score}/30 [${signal}] @ $${r.price?.toFixed(2)||"?"}
-`;
-      msg += `   via: ${r.via}
- 
-`;
+    let msg = `<b>Best Trade Right Now</b>\nSession: ${getSession().toUpperCase()} | Need ${minV}/30\n\n`;
+    results.forEach(r => {
+      const signal = r.score >= minV ? "BUY" : r.score >= minV-3 ? "WATCH" : "SKIP";
+      msg += `[${signal}] <b>${r.ticker}</b> ${r.score}/30 @ $${(r.price||0).toFixed(2)}\n`;
+      msg += `   via: ${r.via}\n\n`;
     });
     ctx.replyWithHTML(msg);
   } catch(e) { ctx.reply(`Error: ${e.message}`); }
 });
  
-// /market — quick market overview
 bot.command("market", async ctx => {
-  ctx.replyWithHTML("🌐 <i>Fetching market overview...</i>");
+  ctx.replyWithHTML("<i>Fetching market overview...</i>");
   try {
-    const [spy, qqq, dia, vix, fg, cfg2] = await Promise.all([
+    const [spy,qqq,dia,vix,fg,fng] = await Promise.all([
       safeFetch(`https://api.polygon.io/v2/aggs/ticker/SPY/prev?adjusted=true&apiKey=${cfg.polygon}`),
       safeFetch(`https://api.polygon.io/v2/aggs/ticker/QQQ/prev?adjusted=true&apiKey=${cfg.polygon}`),
       safeFetch(`https://api.polygon.io/v2/aggs/ticker/DIA/prev?adjusted=true&apiKey=${cfg.polygon}`),
@@ -908,51 +896,29 @@ bot.command("market", async ctx => {
       safeFetch("https://feargreedmeter.com/api/v1/fgi"),
       safeFetch("https://api.alternative.me/fng/?limit=1"),
     ]);
-    const pct = (data) => {
-      if (!data?.results?.[0]) return "N/A";
-      const r = data.results[0];
-      return ((r.c - r.o) / r.o * 100).toFixed(2);
-    };
-    const px = (data) => data?.results?.[0]?.c?.toFixed(2) || "N/A";
-    const spyPct = pct(spy), qqqPct = pct(qqq), diaPct = pct(dia);
-    const arrow = v => parseFloat(v) >= 0 ? "▲" : "▼";
+    const pct = d => d?.results?.[0] ? (((d.results[0].c-d.results[0].o)/d.results[0].o)*100).toFixed(2) : "N/A";
+    const px  = d => d?.results?.[0]?.c?.toFixed(2) || "N/A";
+    const arr = v => parseFloat(v) >= 0 ? "+" : "";
     const fgVal = fg?.fgi?.now?.value || "?";
-    const fgLabel = fg?.fgi?.now?.valueText || "";
-    const cryptoFG = cfg2?.data?.[0]?.value || "?";
-    const cryptoLabel = cfg2?.data?.[0]?.value_classification || "";
+    const fgLbl = fg?.fgi?.now?.valueText || "";
+    const cfgVal = fng?.data?.[0]?.value || "?";
+    const cfgLbl = fng?.data?.[0]?.value_classification || "";
     const vixVal = vix?.results?.[0]?.c?.toFixed(2) || "?";
-    const session = getSession();
+    const sess = getSession();
     const open = getOpen();
-    let msg = `🌐 <b>Market Overview</b>
-`;
-    msg += `Session: <b>${session.toUpperCase()}</b>
- 
-`;
-    msg += `<b>Indices (prev close)</b>
-`;
-    msg += `SPY  $${px(spy)} ${arrow(spyPct)}${Math.abs(parseFloat(spyPct))}%
-`;
-    msg += `QQQ  $${px(qqq)} ${arrow(qqqPct)}${Math.abs(parseFloat(qqqPct))}%
-`;
-    msg += `DIA  $${px(dia)} ${arrow(diaPct)}${Math.abs(parseFloat(diaPct))}%
- 
-`;
-    msg += `<b>Sentiment</b>
-`;
-    msg += `Stock Fear & Greed: ${fgVal}/100 — ${fgLabel}
-`;
-    msg += `Crypto Fear & Greed: ${cryptoFG}/100 — ${cryptoLabel}
-`;
-    msg += `VIX: ${vixVal} ${parseFloat(vixVal)<20?"(Calm)":parseFloat(vixVal)<30?"(Elevated)":"(Panic)"}
- 
-`;
-    msg += `<b>STradeBot</b>
-`;
-    msg += `Open positions: ${open.length}/5
-`;
-    msg += `Losses: $${(getState("total_loss")||0).toFixed(2)}/$300
-`;
-    msg += `Threshold: ${getMinVotes(session)}/30`;
+    let msg = "<b>Market Overview</b>\n";
+    msg += `Session: <b>${sess.toUpperCase()}</b>\n\n`;
+    msg += "<b>Indices (prev close)</b>\n";
+    msg += `SPY  $${px(spy)} (${arr(pct(spy))}${pct(spy)}%)\n`;
+    msg += `QQQ  $${px(qqq)} (${arr(pct(qqq))}${pct(qqq)}%)\n`;
+    msg += `DIA  $${px(dia)} (${arr(pct(dia))}${pct(dia)}%)\n\n`;
+    msg += "<b>Sentiment</b>\n";
+    msg += `Stock F&G: ${fgVal}/100 - ${fgLbl}\n`;
+    msg += `Crypto F&G: ${cfgVal}/100 - ${cfgLbl}\n`;
+    msg += `VIX: ${vixVal} ${parseFloat(vixVal)<20?"(Calm)":parseFloat(vixVal)<30?"(Elevated)":"(Panic)"}\n\n`;
+    msg += "<b>STradeBot</b>\n";
+    msg += `Positions: ${open.length}/5 | Losses: $${(getState("total_loss")||0).toFixed(2)}/$300\n`;
+    msg += `Threshold: ${getMinVotes(sess)}/30 layers`;
     ctx.replyWithHTML(msg);
   } catch(e) { ctx.reply(`Error: ${e.message}`); }
 });
