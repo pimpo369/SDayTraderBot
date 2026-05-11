@@ -778,8 +778,13 @@ async function getPortfolioSummary() {
  
 // ── TELEGRAM COMMANDS ─────────────────────────────────────
 // Auth middleware — only respond to authorized users
+function isAuthorized(id) {
+  const ids = [cfg.chatId, cfg.chatId2].filter(Boolean).map(String);
+  return ids.includes(String(id));
+}
+ 
 bot.use(async (ctx, next) => {
-  if (!isAuthorized(ctx.from?.id)) {
+  if (ctx.from && !isAuthorized(ctx.from.id)) {
     await ctx.reply("Unauthorized.");
     return;
   }
